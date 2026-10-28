@@ -1,4 +1,4 @@
-1080 Snowboarding: Recompiled 1.0 for Linux (experimental)
+1080 Snowboarding: Recompiled 1.0.1 for Linux (experimental)
 
 This Linux build is new and has not been tested on real machines yet, so it
 may not work everywhere. The Windows build is the main one.

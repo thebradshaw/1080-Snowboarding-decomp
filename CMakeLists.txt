@@ -42,7 +42,7 @@ foreach(required RecompiledFuncs/funcs.h rsp/aspMain.cpp recomp-input/module_tab
     endif()
 endforeach()
 
-set(GAME_VERSION "1.0.0" CACHE STRING "Version shown in the launcher")
+set(GAME_VERSION "1.0.1" CACHE STRING "Version shown in the launcher")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/game_version.h.tmp"
     "#pragma once\ninline constexpr const char* game_version = \"${GAME_VERSION}\";\n")
@@ -134,6 +134,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/shadows.cpp
     ${CMAKE_SOURCE_DIR}/src/game/camera.cpp
     ${CMAKE_SOURCE_DIR}/src/game/crt_filter.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/vsync.cpp
     ${CMAKE_SOURCE_DIR}/src/game/hd_textures.cpp
     ${CMAKE_SOURCE_DIR}/src/game/boards.cpp
     ${CMAKE_SOURCE_DIR}/src/game/achievements.cpp

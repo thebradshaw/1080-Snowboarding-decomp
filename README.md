@@ -39,6 +39,7 @@ Every enhancement can be turned off to get the N64 look back. All of them are on
 | Aspect Ratio | **Expand** draws the game as wide as your window (widescreen); **Original** keeps 4:3 |
 | Resolution | Up to your display's resolution, with MSAA |
 | Frame Rate | **60** (the default), **120**, or **30** like the N64 |
+| VSync | **On** (the default) keeps the picture from tearing; **Off** shows frames as soon as they are ready |
 | Draw Distance | **Original**, **Extended** (about three times as far) or **Maximum** (the whole course at once, the default) |
 | Field of View | 100% matches the N64; higher shows more of the course |
 | HD Board Textures | Sharper, 4x upscaled snowboard graphics with smooth edges (on by default) |

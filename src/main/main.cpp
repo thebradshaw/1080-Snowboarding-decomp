@@ -708,6 +708,7 @@ int main(int argc, char** argv) {
         .vi_callback = []() {
             recompinput::update_rumble();
             game::update_crt_filter();
+            game::update_vsync();
             game::update_hd_textures();
             game::achievements::frame();
         },

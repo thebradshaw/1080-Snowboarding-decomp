@@ -272,8 +272,45 @@ index dccaa87..2aa5bbb 100644
  
          // Run the command interpreter.
          DisplayList *dl = dlStart;
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+index 7de5b69..e092b49 100644
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -2,6 +2,8 @@
+ // RT64
+ //
+ 
++#include <atomic>
++
+ #include "rt64_present_queue.h"
+ 
+ #include "common/rt64_thread.h"
+@@ -9,6 +11,14 @@
+ 
+ #include "rt64_workload_queue.h"
+ 
++namespace RT64 {
++    static std::atomic<bool> vsyncWanted{ true };
++};
++
++extern "C" void rt64_set_vsync(bool enabled) {
++    RT64::vsyncWanted.store(enabled, std::memory_order_relaxed);
++}
++
+ namespace RT64 {
+     // PresentQueue
+ 
+@@ -466,6 +476,8 @@ namespace RT64 {
+ 
+             if (processCursor >= 0) {
+                 std::unique_lock<std::mutex> threadLock(threadMutex);
++                // The game's VSync option. Vulkan picks the new present mode up on the resize below.
++                ext.swapChain->setVsyncEnabled(vsyncWanted.load(std::memory_order_relaxed));
+                 const bool needsResize = ext.swapChain->needsResize() || !swapChainValid;
+                 if (needsResize) {
+                     ext.presentGraphicsWorker->commandList->begin();
 diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
-index 1da2550..8b4a0e9 100644
+index 1da2550..1208816 100644
 --- a/src/hle/rt64_rsp.cpp
 +++ b/src/hle/rt64_rsp.cpp
 @@ -207,6 +207,95 @@ namespace RT64 {
@@ -372,6 +409,30 @@ index 1da2550..8b4a0e9 100644
      void RSP::popMatrix(uint32_t count) {
          while (count--) {
              if (modelMatrixStackSize > 1) {
+@@ -1142,12 +1231,23 @@ namespace RT64 {
+             fbPair.scissorRect.merge(scissorRect);
+ 
+             FixedRect drawRect;
++            bool behindCamera = false;
+             for (int i = 0; i < 3; i++) {
+                 const hlslpp::float3 &v = posScreen[globalIndices[i]];
+                 drawRect.ulx = std::min(drawRect.ulx, int32_t(v[0] * 4.0f));
+                 drawRect.uly = std::min(drawRect.uly, int32_t(v[1] * 4.0f));
+                 drawRect.lrx = std::max(drawRect.lrx, int32_t(hlslpp::ceil(v.x).x * 4.0f));
+                 drawRect.lry = std::max(drawRect.lry, int32_t(hlslpp::ceil(v.y).x * 4.0f));
++                if ((globalIndices[i] < workload.drawData.posTransformed.size()) && (float(workload.drawData.posTransformed[globalIndices[i]].w) <= 0.0f)) {
++                    behindCamera = true;
++                }
++            }
++
++            // A corner behind the camera projects to a meaningless point, so the corners don't bound
++            // what the clipped triangle covers. Assume it can reach the whole viewport; the
++            // intersection below limits it to the viewport and scissor.
++            if (behindCamera) {
++                drawRect = FixedRect(INT32_MIN / 2, INT32_MIN / 2, INT32_MAX / 2, INT32_MAX / 2);
+             }
+ 
+             const interop::RSPViewport &viewport = viewportStack[viewportStackSize - 1];
 diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
 index 61bb3b1..bf80c56 100644
 --- a/src/hle/rt64_rsp.h

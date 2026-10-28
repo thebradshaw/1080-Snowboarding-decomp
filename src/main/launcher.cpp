@@ -391,6 +391,7 @@ void build_launcher(LauncherMenu* menu) {
         add_config_row(context, settings_view, "hd_textures");
         add_heading(context, settings_view, "Motion");
         add_frame_rate_row(context, settings_view);
+        add_config_row(context, settings_view, "vsync");
         add_heading(context, settings_view, "View");
         add_config_row(context, settings_view, "draw_distance");
         add_config_row(context, settings_view, "field_of_view");

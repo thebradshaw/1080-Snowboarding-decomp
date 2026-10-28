@@ -1,4 +1,4 @@
-1080 Snowboarding: Recompiled 1.0 for Windows
+1080 Snowboarding: Recompiled 1.0.1 for Windows
 
 1. Unzip this folder anywhere (use a new folder, not over an older version).
 2. Run 1080SnowboardingRecompiled.exe.
@@ -15,6 +15,11 @@ problem happens.
 
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
+
+Changes in 1.0.1: Fixed the dark bar that flickered across the bottom of the
+screen in the Mountain Village ice cave. New VSync setting (launcher main page
+and Settings > Graphics): On (the default) keeps the picture from tearing, Off
+shows frames as soon as they are ready.
 
 Changes in 1.0: First public release (the same game as v0.1.40). The HD
 Textures option is now called HD Board Textures, and the separate -log.exe is
