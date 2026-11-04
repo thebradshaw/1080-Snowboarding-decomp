@@ -210,3 +210,5 @@ Changes in v0.1.4: log.txt includes a crash report.
 Changes in v0.1.3: writes log.txt for bug reports.
 Changes in v0.1.2: Match Race no longer crashes at character select, board
 select or when the race loads (tested under Wine and Linux).
+
+The N64 TV backgrounds in the "backgrounds" folder are by Soqueroeu.

@@ -111,6 +111,8 @@ not in this repository; set `HD_TEXTURE_PACK` and `LAUNCHER_LOGO` to bundle them
 - [N64Recomp](https://github.com/N64Recomp/N64Recomp) by Mr-Wiseguy (MIT)
 - [djsaunde/1080-decomp](https://github.com/djsaunde/1080-decomp), used as a
   reference while working out the module format
+- Soqueroeu, for the N64 TV backgrounds bundled with releases (not part of this
+  repository)
 
 ## License
 

@@ -25,3 +25,5 @@ TV backgrounds: put PNG pictures in the "backgrounds" folder here (or in
 ~/.config/1080SnowboardingRecompiled/backgrounds) and restart, then pick one in
 the TV Background setting. Cheats: choose Cheats on the launcher.
 N64 Slowdown (new in 1.2): slows busy scenes down the way the N64 did.
+
+The N64 TV backgrounds in the "backgrounds" folder are by Soqueroeu.
