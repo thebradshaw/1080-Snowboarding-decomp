@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>
@@ -47,6 +48,7 @@
 #include "theme.h"
 #include "launcher.h"
 #include "game_achievements.h"
+#include "game_cheats.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -541,7 +543,12 @@ int main(int argc, char** argv) {
     (void) argc;
     (void) argv;
     recomp::Version project_version{};
-    if (!recomp::Version::from_string(version_string, project_version)) {
+    // Releases are named 1.1, 1.2 and so on; the runtime wants three numbers.
+    std::string full_version = version_string;
+    if (std::count(full_version.begin(), full_version.end(), '.') == 1) {
+        full_version += ".0";
+    }
+    if (!recomp::Version::from_string(full_version, project_version)) {
         ultramodern::error_handling::message_box(("Invalid version string: " + version_string).c_str());
         return EXIT_FAILURE;
     }
@@ -658,6 +665,7 @@ int main(int argc, char** argv) {
     game::register_launcher();
 
     game::achievements::init();
+    game::cheats::init();
 
     // GAME_AUTOSTART is a development aid: start the game as soon as the
     // launcher opens, so test runs need no clicks. Requires a ROM that was
@@ -709,8 +717,10 @@ int main(int argc, char** argv) {
             recompinput::update_rumble();
             game::update_crt_filter();
             game::update_vsync();
+            game::update_tv_background();
             game::update_hd_textures();
             game::achievements::frame();
+            game::cheats::frame();
         },
         .gfx_init_callback = nullptr,
     };

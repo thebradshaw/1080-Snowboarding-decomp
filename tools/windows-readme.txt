@@ -1,4 +1,4 @@
-1080 Snowboarding: Recompiled 1.0.1 for Windows
+1080 Snowboarding: Recompiled 1.1 for Windows
 
 1. Unzip this folder anywhere (use a new folder, not over an older version).
 2. Run 1080SnowboardingRecompiled.exe.
@@ -15,6 +15,15 @@ problem happens.
 
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
+
+Changes in 1.1: New TV Background setting: shows the game on a TV in a room,
+like RetroArch's bezel overlays. Put PNG pictures in the "backgrounds" folder
+next to the exe (or in %LOCALAPPDATA%\1080SnowboardingRecompiled\backgrounds)
+and restart; each picture becomes a choice. The game goes in the flat screen
+area in the middle of the picture, and a transparent "<name>_Led.png" is drawn
+on top (such as a TV's power light). New Cheats page on the launcher for
+original N64 GameShark and Action Replay codes: built-in unlocks, your own
+codes, each one on or off, saved for next time.
 
 Changes in 1.0.1: Fixed the dark bar that flickered across the bottom of the
 screen in the Mountain Village ice cave. New VSync setting (launcher main page

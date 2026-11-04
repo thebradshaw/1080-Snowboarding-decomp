@@ -47,8 +47,13 @@ Every enhancement can be turned off to get the N64 look back. All of them are on
 | Rider Shadow | **Original** casts it along the sun; **Under Rider** keeps it under the rider |
 | Ice Reflection | **Solid** draws the rider's reflection as one see-through figure; **Original** keeps the N64's patchy look |
 | CRT Filter | **Scanlines** or a full **CRT** look (off by default) |
+| TV Background | Shows the game on a TV in a room, like RetroArch bezels. Put PNG pictures in the `backgrounds` folder (next to the program or in the app data folder); the game goes in the flat screen area in the middle, and a transparent `<name>_Led.png` is drawn on top (off by default) |
 
 Keyboard, mouse and gamepads all work, and controls can be remapped in Controls. The Mods menu loads RT64 texture packs and code mods.
+
+## Cheats
+
+Choose **Cheats** on the launcher to use original N64 GameShark and Action Replay codes. Common unlocks (all boarders and courses, the Panda and Penguin boards, trick attacks and contests) are built in; add your own with a name and a code such as `81255088 00FF`. Cheats can be turned on and off one by one and are saved for next time.
 
 ## RetroAchievements
 

@@ -273,7 +273,7 @@ index dccaa87..2aa5bbb 100644
          // Run the command interpreter.
          DisplayList *dl = dlStart;
 diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
-index 7de5b69..e092b49 100644
+index 7de5b69..2a3f326 100644
 --- a/src/hle/rt64_present_queue.cpp
 +++ b/src/hle/rt64_present_queue.cpp
 @@ -2,6 +2,8 @@
@@ -300,7 +300,20 @@ index 7de5b69..e092b49 100644
  namespace RT64 {
      // PresentQueue
  
-@@ -466,6 +476,8 @@ namespace RT64 {
+@@ -341,8 +351,12 @@ namespace RT64 {
+                     }
+                 }
+                 
++                const bool drawBackground = viRenderer->prepareBackground(ext.device, commandList);
+                 commandList->setFramebuffer(swapChainFramebuffer);
+                 commandList->clearColor();
++                if (drawBackground) {
++                    viRenderer->renderBackground(ext.device, commandList, ext.swapChain, ext.shaderLibrary);
++                }
+ 
+                 if (renderParams.texture != nullptr) {
+                     commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(renderParams.texture, RenderTextureLayout::SHADER_READ));
+@@ -466,6 +480,8 @@ namespace RT64 {
  
              if (processCursor >= 0) {
                  std::unique_lock<std::mutex> threadLock(threadMutex);
@@ -557,10 +570,52 @@ index a870166..c70fd18 100644
      }
  
 diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
-index 89f2425..5c83dbe 100644
+index 89f2425..124ae64 100644
 --- a/src/hle/rt64_workload_queue.cpp
 +++ b/src/hle/rt64_workload_queue.cpp
-@@ -990,6 +990,7 @@ namespace RT64 {
+@@ -124,7 +124,18 @@ namespace RT64 {
+ 
+     void WorkloadQueue::threadConfigurationUpdate(hlslpp::uint2 viFbSize, WorkloadConfiguration &workloadConfig) {
+         const std::scoped_lock lock(ext.sharedResources->configurationMutex);
+-        const bool sizeChanged = ext.sharedResources->swapChainSizeChanged;
++        // With a TV background on, the game picture only fills the TV's screen. A change of that area
++        // counts as a window size change.
++        float screenAreaX, screenAreaY, screenAreaWidth, screenAreaHeight;
++        VIRenderer::getScreenArea(float(ext.sharedResources->swapChainWidth), float(ext.sharedResources->swapChainHeight), screenAreaX, screenAreaY, screenAreaWidth, screenAreaHeight);
++        const uint32_t screenWidth = uint32_t(screenAreaWidth + 0.5f);
++        const uint32_t screenHeight = uint32_t(screenAreaHeight + 0.5f);
++        static uint32_t lastScreenWidth = 0;
++        static uint32_t lastScreenHeight = 0;
++        const bool screenAreaChanged = (lastScreenWidth != 0) && ((screenWidth != lastScreenWidth) || (screenHeight != lastScreenHeight));
++        lastScreenWidth = screenWidth;
++        lastScreenHeight = screenHeight;
++        const bool sizeChanged = ext.sharedResources->swapChainSizeChanged || screenAreaChanged;
+         ext.sharedResources->swapChainSizeChanged = false;
+         
+         // Retrieve the reference height to be used for determining the resolution scale. Impose a minimum in case
+@@ -138,8 +149,8 @@ namespace RT64 {
+         const auto ratioMode = ext.sharedResources->userConfig.aspectRatio;
+         switch (ratioMode) {
+         case UserConfiguration::AspectRatio::Expand:
+-            if ((ext.sharedResources->swapChainWidth > 0) && (ext.sharedResources->swapChainHeight > 0)) {
+-                const float derivedRatioTarget = float(ext.sharedResources->swapChainWidth) / float(ext.sharedResources->swapChainHeight);
++            if ((screenWidth > 0) && (screenHeight > 0)) {
++                const float derivedRatioTarget = float(screenWidth) / float(screenHeight);
+                 workloadConfig.aspectRatioTarget = std::max(derivedRatioTarget, workloadConfig.aspectRatioSource);
+             }
+             else {
+@@ -189,8 +200,8 @@ namespace RT64 {
+         const auto resolutionMode = ext.sharedResources->userConfig.resolution;
+         switch (resolutionMode) {
+         case UserConfiguration::Resolution::WindowIntegerScale:
+-            if (ext.sharedResources->swapChainHeight > 0) {
+-                resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + referenceHeight - 1) / referenceHeight), 1.0f);
++            if (screenHeight > 0) {
++                resolutionMultiplier = std::max(float((screenHeight + referenceHeight - 1) / referenceHeight), 1.0f);
+             }
+             else {
+                 resolutionMultiplier = 1.0f;
+@@ -990,6 +1001,7 @@ namespace RT64 {
                      matchingProfiler.reset();
                      matchingProfiler.start();
                      curFrame.match(ext.workloadGraphicsWorker, *this, prevFrame, ext.workloadVelocityUploader, velocityUploaderUsed, tileInterpolationUsed, lookAtInterpolationUsed);
@@ -806,15 +861,18 @@ index cd8004d..d5e208f 100644
              const DrawData &drawData = workload.drawData;
              DrawBuffers &drawBuffers = workload.drawBuffers;
 diff --git a/src/render/rt64_vi_renderer.cpp b/src/render/rt64_vi_renderer.cpp
-index b4ff4e9..ca53c14 100644
+index b4ff4e9..8debb3f 100644
 --- a/src/render/rt64_vi_renderer.cpp
 +++ b/src/render/rt64_vi_renderer.cpp
-@@ -4,10 +4,16 @@
+@@ -4,10 +4,71 @@
  
  #include "rt64_vi_renderer.h"
  
 +#include <algorithm>
 +#include <atomic>
++#include <cstring>
++#include <mutex>
++#include <vector>
 +
  #include "shared/rt64_hlsl.h"
  #include "shared/rt64_video_interface.h"
@@ -823,10 +881,74 @@ index b4ff4e9..ca53c14 100644
 +    // CRT filter chosen by the game (0 = off, 1 = scanlines, 2 = CRT). Added for 1080 Snowboarding: Recompiled.
 +    static std::atomic<uint32_t> crtFilterMode{ 0 };
 +
++    // TV background chosen by the game. The image is fitted inside the window keeping its shape, and the
++    // game picture goes in the TV's screen (a rectangle given as fractions of the image).
++    struct TVBackground {
++        std::mutex mutex;
++        std::vector<uint8_t> pixels;
++        uint32_t width = 0;
++        uint32_t height = 0;
++        float screen[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
++        uint64_t version = 0;
++        std::atomic<bool> active{ false };
++    };
++
++    static TVBackground tvBackground;
++
++    // Fills the window with the picture, cutting off some of its edges, as long as the TV's screen stays whole.
++    // Otherwise the whole picture is shown with black bars.
++    static void fitBackground(float windowWidth, float windowHeight, float imageAspect, const float screen[4], float &x, float &y, float &width, float &height) {
++        const bool windowWider = (windowWidth / windowHeight) > imageAspect;
++        // Cover.
++        if (windowWider) {
++            width = windowWidth;
++            height = windowWidth / imageAspect;
++        }
++        else {
++            height = windowHeight;
++            width = windowHeight * imageAspect;
++        }
++
++        x = (windowWidth - width) / 2.0f;
++        y = (windowHeight - height) / 2.0f;
++        const float margin = 0.02f;
++        const bool screenVisible =
++            (x + screen[0] * width >= -0.5f + margin * windowWidth) && (x + screen[2] * width <= windowWidth * (1.0f - margin) + 0.5f) &&
++            (y + screen[1] * height >= -0.5f + margin * windowHeight) && (y + screen[3] * height <= windowHeight * (1.0f - margin) + 0.5f);
++        if (screenVisible) {
++            return;
++        }
++
++        // Contain.
++        if (windowWider) {
++            height = windowHeight;
++            width = windowHeight * imageAspect;
++        }
++        else {
++            width = windowWidth;
++            height = windowWidth / imageAspect;
++        }
++
++        x = (windowWidth - width) / 2.0f;
++        y = (windowHeight - height) / 2.0f;
++    }
++
      // VIRenderer
  
      VIRenderer::VIRenderer() { }
-@@ -77,6 +83,8 @@ namespace RT64 {
+@@ -23,9 +84,9 @@ namespace RT64 {
+         return coordinate * relativeScale;
+     }
+ 
+-    inline hlslpp::float2 fromHDtoWindow(hlslpp::float2 coordinate, hlslpp::float2 hdSize, hlslpp::float2 windowSize) {
++    inline hlslpp::float2 fromHDtoWindow(hlslpp::float2 coordinate, hlslpp::float2 hdSize, hlslpp::float2 windowOrigin, hlslpp::float2 windowSize) {
+         const hlslpp::float2 hdCenter = hdSize / 2;
+-        const hlslpp::float2 windowCenter = windowSize / 2;
++        const hlslpp::float2 windowCenter = windowOrigin + windowSize / 2;
+         const hlslpp::float2 relativeCoordinate = { coordinate.x - hdCenter.x, coordinate.y - hdCenter.y };
+ 
+         // Window is wider than virtual HD TV, we do pillarboxing.
+@@ -77,6 +138,8 @@ namespace RT64 {
          pushConstants.videoResolution = computeHDSize(hlslpp::float2(p.vi->fbSize()), p.resolutionScale, p.downsamplingScale);
          pushConstants.textureResolution = { float(p.textureWidth), float(p.textureHeight) };
          pushConstants.gamma = p.vi->gamma();
@@ -835,17 +957,197 @@ index b4ff4e9..ca53c14 100644
  
          p.commandList->setPipeline(shader->pipeline.get());
          p.commandList->setGraphicsPipelineLayout(shader->pipelineLayout.get());
-@@ -122,4 +130,8 @@ namespace RT64 {
+@@ -102,7 +165,10 @@ namespace RT64 {
+         // specified by the VI.
+         const hlslpp::float2 sdSize = removeBlackBorders ? hlslpp::float2(vi.fbSize()) : hlslpp::float2(320.0f, 240.0f);
+         const hlslpp::float2 hdSize = computeHDSize(sdSize, resolutionScale, downsamplingScale);
+-        const hlslpp::float2 windowSize = { float(swapChain->getWidth()), float(swapChain->getHeight()) };
++        float areaX, areaY, areaWidth, areaHeight;
++        getScreenArea(float(swapChain->getWidth()), float(swapChain->getHeight()), areaX, areaY, areaWidth, areaHeight);
++        const hlslpp::float2 windowOrigin = { areaX, areaY };
++        const hlslpp::float2 windowSize = { areaWidth, areaHeight };
+ 
+         // Query the VI for the current rendering area.
+         hlslpp::float4 viViewRect = vi.viewRectangle() * sdSize.xyxy;
+@@ -111,15 +177,140 @@ namespace RT64 {
+         // Scale all the rectangles to the space of the Window.
+         hlslpp::float2 topLeftViewport = fromSDtoHD({ float(viViewRect.x), float(viViewRect.y) }, sdSize, hdSize);
+         hlslpp::float2 bottomRightViewport = fromSDtoHD({ float(viViewRect.x + viViewRect.z), float(viViewRect.y + viViewRect.w) }, sdSize, hdSize);
+-        topLeftViewport = fromHDtoWindow(topLeftViewport, hdSize, windowSize);
+-        bottomRightViewport = fromHDtoWindow(bottomRightViewport, hdSize, windowSize);
++        topLeftViewport = fromHDtoWindow(topLeftViewport, hdSize, windowOrigin, windowSize);
++        bottomRightViewport = fromHDtoWindow(bottomRightViewport, hdSize, windowOrigin, windowSize);
+ 
+         hlslpp::float2 topLeftScissor = fromSDtoHD({ float(viCropRect.x), float(viCropRect.y) }, sdSize, hdSize);
+         hlslpp::float2 bottomRightScissor = fromSDtoHD({ float(viCropRect.x + viCropRect.z), float(viCropRect.y + viCropRect.w) }, sdSize, hdSize);
+-        topLeftScissor = fromHDtoWindow(topLeftScissor, hdSize, windowSize);
+-        bottomRightScissor = fromHDtoWindow(bottomRightScissor, hdSize, windowSize);
++        topLeftScissor = fromHDtoWindow(topLeftScissor, hdSize, windowOrigin, windowSize);
++        bottomRightScissor = fromHDtoWindow(bottomRightScissor, hdSize, windowOrigin, windowSize);
+ 
          viewport = RenderViewport(topLeftViewport.x, topLeftViewport.y, bottomRightViewport.x - topLeftViewport.x, bottomRightViewport.y - topLeftViewport.y);
          scissor = RenderRect(lround(topLeftScissor.x), lround(topLeftScissor.y), lround(bottomRightScissor.x), lround(bottomRightScissor.y));
      }
 -};
 \ No newline at end of file
++
++    void VIRenderer::getScreenArea(float windowWidth, float windowHeight, float &x, float &y, float &width, float &height) {
++        x = 0.0f;
++        y = 0.0f;
++        width = windowWidth;
++        height = windowHeight;
++        if (!tvBackground.active.load(std::memory_order_acquire) || (windowWidth <= 0.0f) || (windowHeight <= 0.0f)) {
++            return;
++        }
++
++        const std::scoped_lock lock(tvBackground.mutex);
++        if ((tvBackground.width == 0) || (tvBackground.height == 0)) {
++            return;
++        }
++
++        float imageX, imageY, imageWidth, imageHeight;
++        fitBackground(windowWidth, windowHeight, float(tvBackground.width) / float(tvBackground.height), tvBackground.screen, imageX, imageY, imageWidth, imageHeight);
++        x = imageX + tvBackground.screen[0] * imageWidth;
++        y = imageY + tvBackground.screen[1] * imageHeight;
++        width = std::max((tvBackground.screen[2] - tvBackground.screen[0]) * imageWidth, 1.0f);
++        height = std::max((tvBackground.screen[3] - tvBackground.screen[1]) * imageHeight, 1.0f);
++    }
++
++    bool VIRenderer::prepareBackground(RenderDevice *device, RenderCommandList *commandList) {
++        if (!tvBackground.active.load(std::memory_order_acquire)) {
++            return false;
++        }
++
++        const std::scoped_lock lock(tvBackground.mutex);
++        if ((tvBackground.width == 0) || (tvBackground.height == 0)) {
++            return false;
++        }
++
++        if ((backgroundTexture == nullptr) || (backgroundVersion != tvBackground.version)) {
++            const uint32_t width = tvBackground.width;
++            const uint32_t height = tvBackground.height;
++            const uint32_t rowPitch = width * 4;
++            const uint32_t alignedRowPitch = (rowPitch + 255) & ~255U;
++            backgroundTexture = device->createTexture(RenderTextureDesc::Texture2D(width, height, 1, RenderFormat::R8G8B8A8_UNORM));
++            backgroundUpload = device->createBuffer(RenderBufferDesc::UploadBuffer(alignedRowPitch * height));
++            uint8_t *dstData = reinterpret_cast<uint8_t *>(backgroundUpload->map());
++            for (uint32_t row = 0; row < height; row++) {
++                memcpy(dstData + size_t(row) * alignedRowPitch, tvBackground.pixels.data() + size_t(row) * rowPitch, rowPitch);
++            }
++
++            backgroundUpload->unmap();
++            commandList->barriers(RenderBarrierStage::COPY, RenderTextureBarrier(backgroundTexture.get(), RenderTextureLayout::COPY_DEST));
++            commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(backgroundTexture.get()), RenderTextureCopyLocation::PlacedFootprint(backgroundUpload.get(), RenderFormat::R8G8B8A8_UNORM, width, height, 1, alignedRowPitch / 4));
++            commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(backgroundTexture.get(), RenderTextureLayout::SHADER_READ));
++            backgroundWidth = width;
++            backgroundHeight = height;
++            backgroundVersion = tvBackground.version;
++            memcpy(backgroundScreen, tvBackground.screen, sizeof(backgroundScreen));
++
++            // The image is now on the GPU.
++            tvBackground.pixels.clear();
++            tvBackground.pixels.shrink_to_fit();
++        }
++
++        return true;
++    }
++
++    void VIRenderer::renderBackground(RenderDevice *device, RenderCommandList *commandList, const RenderSwapChain *swapChain, const ShaderLibrary *shaderLibrary) {
++        if ((backgroundTexture == nullptr) || (backgroundWidth == 0) || (backgroundHeight == 0)) {
++            return;
++        }
++
++        const ShaderRecord *shader = &shaderLibrary->videoInterfaceLinear;
++        const RenderSampler *sampler = shaderLibrary->samplerLibrary.linear.clampClamp.get();
++        if (backgroundDescriptorSet == nullptr) {
++            backgroundDescriptorSet = std::make_unique<VideoInterfaceDescriptorSet>(sampler, device);
++        }
++
++        backgroundDescriptorSet->setTexture(backgroundDescriptorSet->gInput, backgroundTexture.get(), RenderTextureLayout::SHADER_READ);
++
++        const float windowWidth = float(swapChain->getWidth());
++        const float windowHeight = float(swapChain->getHeight());
++        float x, y, width, height;
++        fitBackground(windowWidth, windowHeight, float(backgroundWidth) / float(backgroundHeight), backgroundScreen, x, y, width, height);
++        commandList->setViewports(RenderViewport(x, y, width, height));
++        commandList->setScissors(RenderRect(0, 0, int32_t(windowWidth), int32_t(windowHeight)));
++
++        interop::VideoInterfaceCB pushConstants;
++        pushConstants.videoResolution = { float(backgroundWidth), float(backgroundHeight) };
++        pushConstants.textureResolution = { float(backgroundWidth), float(backgroundHeight) };
++        pushConstants.gamma = 1.0f;
++        pushConstants.crtMode = 0.0f;
++        pushConstants.crtLines = 1.0f;
++        commandList->setPipeline(shader->pipeline.get());
++        commandList->setGraphicsPipelineLayout(shader->pipelineLayout.get());
++        commandList->setGraphicsDescriptorSet(backgroundDescriptorSet->get(), 0);
++        commandList->setGraphicsPushConstants(0, &pushConstants);
++        commandList->setVertexBuffers(0, nullptr, 0, nullptr);
++        commandList->drawInstanced(3, 1, 0, 0);
++    }
 +};
++
++// Sets the TV background: RGBA8 pixels (copied), and the TV screen as fractions of the image
++// (left, top, right, bottom). Pass null pixels to turn it off.
++extern "C" void rt64_set_tv_background(const uint8_t *rgba, uint32_t width, uint32_t height, float left, float top, float right, float bottom) {
++    RT64::TVBackground &tv = RT64::tvBackground;
++    const std::scoped_lock lock(tv.mutex);
++    if ((rgba == nullptr) || (width == 0) || (height == 0)) {
++        tv.active.store(false, std::memory_order_release);
++        tv.width = 0;
++        tv.height = 0;
++        tv.pixels.clear();
++        tv.pixels.shrink_to_fit();
++        tv.version++;
++        return;
++    }
++
++    tv.pixels.assign(rgba, rgba + size_t(width) * height * 4);
++    tv.width = width;
++    tv.height = height;
++    tv.screen[0] = left;
++    tv.screen[1] = top;
++    tv.screen[2] = right;
++    tv.screen[3] = bottom;
++    tv.version++;
++    tv.active.store(true, std::memory_order_release);
++}
 +
 +extern "C" void rt64_set_crt_filter(uint32_t mode) {
 +    RT64::crtFilterMode.store(mode, std::memory_order_relaxed);
 +}
+diff --git a/src/render/rt64_vi_renderer.h b/src/render/rt64_vi_renderer.h
+index 8a3782a..5faa4b8 100644
+--- a/src/render/rt64_vi_renderer.h
++++ b/src/render/rt64_vi_renderer.h
+@@ -31,9 +31,26 @@ namespace RT64 {
+             bool removeBlackBorders = false;
+         };
+ 
++        // TV background (added for 1080 Snowboarding: Recompiled).
++        std::unique_ptr<VideoInterfaceDescriptorSet> backgroundDescriptorSet;
++        std::unique_ptr<RenderTexture> backgroundTexture;
++        std::unique_ptr<RenderBuffer> backgroundUpload;
++        uint32_t backgroundWidth = 0;
++        uint32_t backgroundHeight = 0;
++        uint64_t backgroundVersion = 0;
++        float backgroundScreen[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
++
+         VIRenderer();
+         ~VIRenderer();
+         void render(const RenderParams &p);
++
++        // Uploads a new background if the game set one. Call before the swap chain framebuffer is set.
++        // Returns true when a background should be drawn.
++        bool prepareBackground(RenderDevice *device, RenderCommandList *commandList);
++        void renderBackground(RenderDevice *device, RenderCommandList *commandList, const RenderSwapChain *swapChain, const ShaderLibrary *shaderLibrary);
++
++        // When a TV background is on, the area of the window the game picture goes in. Otherwise the whole window.
++        static void getScreenArea(float windowWidth, float windowHeight, float &x, float &y, float &width, float &height);
+         static void getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, bool removeBlackBorders, RenderViewport &viewport, RenderRect &scissor);
+     };
+ };
+\ No newline at end of file
 diff --git a/src/shaders/VideoInterfacePS.hlsl b/src/shaders/VideoInterfacePS.hlsl
 index 3f33475..51c28c3 100644
 --- a/src/shaders/VideoInterfacePS.hlsl

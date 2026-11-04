@@ -39,6 +39,10 @@ namespace game {
     void add_vsync_option(recomp::config::Config& graphics);
     void update_vsync();
 
+    // TV Background option (tv_background.cpp): the game shown on a TV picture. update_tv_background runs every frame.
+    void add_tv_background_option(recomp::config::Config& graphics);
+    void update_tv_background();
+
     // HD Textures (hd_textures.cpp): the option, copying the bundled pack into
     // the mods folder at startup, and applying the option (every frame).
     void add_hd_textures_option(recomp::config::Config& graphics);

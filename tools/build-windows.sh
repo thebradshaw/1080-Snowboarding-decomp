@@ -7,6 +7,7 @@
 # DirectX-Headers (https://github.com/microsoft/DirectX-Headers) in
 # $DIRECTX_HEADERS, wine64 (runs build-time tools), cmake and ninja.
 # Optional: LAUNCHER_LOGO=path/to/logo.png to show the logo in the launcher.
+# Optional: BACKGROUNDS_DIR=folder of TV background PNGs to bundle.
 # Optional: HD_TEXTURE_PACK=path/to/pack.rtz to bundle the HD texture pack.
 # Output: build/win/package/1080SnowboardingRecompiled (zip it to share).
 set -euo pipefail
@@ -45,6 +46,12 @@ fi
 if [ -n "${HD_TEXTURE_PACK:-}" ] && [ -f "$HD_TEXTURE_PACK" ]; then
     mkdir -p "$PKG/textures"
     cp "$HD_TEXTURE_PACK" "$PKG/textures/1080-hd-textures.rtz"
+fi
+# TV backgrounds: an empty "backgrounds" folder players can drop PNGs into, plus
+# any given in BACKGROUNDS_DIR (artwork is not in the repository).
+mkdir -p "$PKG/backgrounds"
+if [ -n "${BACKGROUNDS_DIR:-}" ] && [ -d "$BACKGROUNDS_DIR" ]; then
+    find "$BACKGROUNDS_DIR" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.txt' \) -exec cp {} "$PKG/backgrounds/" \;
 fi
 VERSION=$(sed -n 's/^GAME_VERSION:STRING=//p' CMakeCache.txt)
 sed "1s/(early)/(v$VERSION, early)/" "$ROOT/tools/windows-readme.txt" > "$PKG/README.txt"

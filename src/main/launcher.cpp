@@ -8,6 +8,7 @@
 
 #include "launcher.h"
 #include "game_achievements.h"
+#include "game_cheats.h"
 
 #include <cmath>
 #include <filesystem>
@@ -30,6 +31,7 @@
 #include "elements/ui_radio.h"
 #include "elements/ui_svg.h"
 #include "elements/ui_text_input.h"
+#include "elements/ui_toggle.h"
 
 
 namespace {
@@ -47,6 +49,12 @@ Element* settings_view = nullptr;
 Element* achievements_view = nullptr;
 bool showing_achievements = false;
 uint32_t shown_achievements_version = 0;
+Element* cheats_view = nullptr;
+bool showing_cheats = false;
+uint32_t shown_cheats_version = 0;
+std::string typed_cheat_name;
+std::string typed_cheat_code;
+std::string cheat_error;
 std::string typed_username;
 std::string typed_password;
 
@@ -192,7 +200,12 @@ Label* add_text(ContextId context, Element* parent, const std::string& text, the
 
 void build_achievements_view();
 
+void show_cheats_view(bool show);
+
 void show_achievements_view(bool show) {
+    if (show && showing_cheats) {
+        show_cheats_view(false);
+    }
     showing_achievements = show;
     settings_view->set_display(show ? Display::None : Display::Block);
     achievements_view->set_display(show ? Display::Block : Display::None);
@@ -331,6 +344,118 @@ void build_achievements_view() {
     }
 }
 
+// --- Cheats page (replaces the settings panel while it is open) ---
+
+constexpr const char* cheats_help =
+    "Original N64 GameShark and Action Replay codes. A cheat that is on is written into the game's memory "
+    "every frame, as the GameShark does. Unlocks stay in your save once the game saves, even after the cheat is off. "
+    "Your cheats and their on/off states are saved for next time.";
+
+void build_cheats_view();
+
+void show_cheats_view(bool show) {
+    if (show && showing_achievements) {
+        show_achievements_view(false);
+    }
+    showing_cheats = show;
+    settings_view->set_display(show ? Display::None : Display::Block);
+    cheats_view->set_display(show ? Display::Block : Display::None);
+    if (show) {
+        shown_cheats_version = 0;   // rebuild on the next frame
+        show_help("Cheats", cheats_help);
+    }
+}
+
+void add_cheat_row(ContextId context, Element* parent, size_t index, const game::cheats::Cheat& cheat) {
+    Element* row = context.create_element<Element>(parent, 0, "div", false);
+    row->set_display(Display::Flex);
+    row->set_flex_direction(FlexDirection::Row);
+    row->set_align_items(AlignItems::Center);
+    row->set_padding_top(8.0f);
+    row->set_padding_bottom(8.0f);
+    row->set_border_bottom_width(1.0f);
+    row->set_border_bottom_color(Color{ 150, 205, 245, 40 });
+
+    Toggle* toggle = context.create_element<Toggle>(row, ToggleSize::Medium);
+    toggle->set_checked(cheat.enabled);
+    toggle->set_flex_shrink(0.0f);
+    toggle->set_margin_right(16.0f);
+    toggle->add_checked_callback([index](bool checked) {
+        game::cheats::set_enabled(index, checked);
+        // The toggle already shows the change; don't rebuild the list under it.
+        shown_cheats_version = game::cheats::version();
+    });
+
+    Element* text = context.create_element<Element>(row, 0, "div", false);
+    text->set_display(Display::Flex);
+    text->set_flex_direction(FlexDirection::Column);
+    text->set_flex_grow(1.0f);
+    add_text(context, text, cheat.name, theme::Typography::LabelMD, Color{ 255, 255, 255, 255 });
+    if (!cheat.note.empty()) {
+        add_text(context, text, cheat.note, theme::Typography::Body, locked_color)->set_margin_top(2.0f);
+    }
+    add_text(context, text, cheat.code, theme::Typography::LabelSM, heading_color)->set_margin_top(2.0f);
+
+    if (!cheat.builtin) {
+        Button* remove = context.create_element<Button>(row, "Remove", ButtonStyle::Tertiary, ButtonSize::Small);
+        remove->set_white_space(WhiteSpace::Nowrap);
+        remove->set_flex_shrink(0.0f);
+        remove->set_margin_left(12.0f);
+        remove->add_pressed_callback([index]() { game::cheats::remove(index); });
+    }
+}
+
+void build_cheats_view() {
+    ContextId context = get_current_context();
+    shown_cheats_version = game::cheats::version();
+    cheats_view->clear_children();
+
+    Element* top = context.create_element<Element>(cheats_view, 0, "div", false);
+    top->set_display(Display::Flex);
+    top->set_flex_direction(FlexDirection::Row);
+    top->set_align_items(AlignItems::Center);
+    top->set_justify_content(JustifyContent::SpaceBetween);
+    add_heading(context, top, "Cheats");
+    Button* back = context.create_element<Button>(top, "Settings", ButtonStyle::Tertiary, ButtonSize::Small);
+    back->set_white_space(WhiteSpace::Nowrap);
+    back->set_flex_shrink(0.0f);
+    back->add_pressed_callback([]() { show_cheats_view(false); });
+
+    const auto cheats = game::cheats::list();
+    for (size_t i = 0; i < cheats.size(); i++) {
+        add_cheat_row(context, cheats_view, i, cheats[i]);
+    }
+
+    add_text(context, cheats_view, "Add a cheat", theme::Typography::LabelMD, heading_color)->set_margin_top(18.0f);
+    add_text(context, cheats_view, "Name", theme::Typography::LabelSM, heading_color)->set_margin_top(8.0f);
+    TextInput* name = context.create_element<TextInput>(cheats_view, true);
+    name->set_text(typed_cheat_name);
+    name->set_width(100.0f, Unit::Percent);
+    name->set_margin_bottom(10.0f);
+    name->add_text_changed_callback([](const std::string& text) { typed_cheat_name = text; });
+    add_text(context, cheats_view, "Code (such as 81255088 00FF; put several codes one after another)",
+        theme::Typography::LabelSM, heading_color);
+    TextInput* code = context.create_element<TextInput>(cheats_view, true);
+    code->set_text(typed_cheat_code);
+    code->set_width(100.0f, Unit::Percent);
+    code->set_margin_bottom(14.0f);
+    code->add_text_changed_callback([](const std::string& text) { typed_cheat_code = text; });
+    Button* add = context.create_element<Button>(cheats_view, "Add Cheat", ButtonStyle::Primary);
+    add->set_width(240.0f);
+    add->add_pressed_callback([]() {
+        cheat_error = game::cheats::add(typed_cheat_name, typed_cheat_code);
+        if (cheat_error.empty()) {
+            typed_cheat_name.clear();
+            typed_cheat_code.clear();
+        }
+        shown_cheats_version = 0;   // rebuild to show the new cheat or the error
+    });
+    if (!cheat_error.empty()) {
+        add_text(context, cheats_view, cheat_error, theme::Typography::Body, Color{ 255, 150, 130, 255 })
+            ->set_margin_top(12.0f);
+    }
+}
+
 void build_launcher(LauncherMenu* menu) {
     ContextId context = get_current_context();
     menu->remove_default_title();
@@ -388,6 +513,7 @@ void build_launcher(LauncherMenu* menu) {
         add_config_row(context, settings_view, gfx::ar_option);
         add_config_row(context, settings_view, gfx::res_option);
         add_config_row(context, settings_view, "crt_filter");
+        add_config_row(context, settings_view, "tv_background");
         add_config_row(context, settings_view, "hd_textures");
         add_heading(context, settings_view, "Motion");
         add_frame_rate_row(context, settings_view);
@@ -401,6 +527,9 @@ void build_launcher(LauncherMenu* menu) {
 
         achievements_view = context.create_element<Element>(panel, 0, "div", false);
         achievements_view->set_display(Display::None);
+
+        cheats_view = context.create_element<Element>(panel, 0, "div", false);
+        cheats_view->set_display(Display::None);
     }
 
     // Help text for whatever setting is under the cursor, on the left.
@@ -408,9 +537,9 @@ void build_launcher(LauncherMenu* menu) {
         Element* panel = make_panel(context, root);
         panel->set_position(Position::Absolute);
         panel->set_left(0.0f);
-        panel->set_top(34.0f, Unit::Percent);
+        panel->set_top(26.0f, Unit::Percent);
         panel->set_width(44.0f, Unit::Percent);
-        panel->set_height(22.0f, Unit::Percent);
+        panel->set_height(21.0f, Unit::Percent);
         help_title = context.create_element<Label>(panel, "Ready", theme::Typography::LabelLG);
         help_title->set_color(heading_color);
         help_title->set_margin_bottom(8.0f);
@@ -428,7 +557,7 @@ void build_launcher(LauncherMenu* menu) {
         panel->set_left(0.0f);
         panel->set_bottom(0.0f);
         panel->set_width(44.0f, Unit::Percent);
-        panel->set_height(41.0f, Unit::Percent);
+        panel->set_height(49.0f, Unit::Percent);
     }
     auto& game = supported_games[0];
     GameOptionsMenu* options = menu->init_game_options_menu(game.game_id, game.mod_game_id, game.display_name, game.thumbnail_bytes, GameOptionsMenuLayout::Left);
@@ -438,6 +567,7 @@ void build_launcher(LauncherMenu* menu) {
     options->set_gap(0.0f);
     options->add_start_game_or_load_rom_option();
     options->add_option("Achievements", []() { show_achievements_view(!showing_achievements); });
+    options->add_option("Cheats", []() { show_cheats_view(!showing_cheats); });
     options->add_setup_controls_option();
     options->add_settings_option();
     options->add_mods_option();
@@ -456,5 +586,8 @@ void game::launcher_update(recompui::LauncherMenu*) {
     game::achievements::launcher_tick();
     if (showing_achievements && game::achievements::snapshot().version != shown_achievements_version) {
         build_achievements_view();
+    }
+    if (showing_cheats && game::cheats::version() != shown_cheats_version) {
+        build_cheats_view();
     }
 }
