@@ -1,4 +1,4 @@
-1080 Snowboarding: Recompiled 1.1 for Windows
+1080 Snowboarding: Recompiled 1.2 for Windows
 
 1. Unzip this folder anywhere (use a new folder, not over an older version).
 2. Run 1080SnowboardingRecompiled.exe.
@@ -15,6 +15,13 @@ problem happens.
 
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
+
+Changes in 1.2: New N64 Slowdown setting (launcher main page and Settings >
+Graphics, off by default). The game moves forward a fixed step each frame, so
+on the N64 it slowed down whenever a scene was too busy to draw in time. This
+version always draws in time and runs at full speed at 30, 60 and 120 fps.
+With N64 Slowdown on, busy scenes slow down as they did on the console. The
+amount is an estimate for now; it matches best with the Original draw distance.
 
 Changes in 1.1: New TV Background setting: shows the game on a TV in a room,
 like RetroArch's bezel overlays. Put PNG pictures in the "backgrounds" folder

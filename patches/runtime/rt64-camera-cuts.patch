@@ -322,8 +322,101 @@ index 7de5b69..2a3f326 100644
                  const bool needsResize = ext.swapChain->needsResize() || !swapChainValid;
                  if (needsResize) {
                      ext.presentGraphicsWorker->commandList->begin();
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+index 9a33a2d..aa988ef 100644
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -26,6 +26,23 @@
+ #endif
+ 
+ namespace RT64 {
++    N64Cost n64Cost;
++
++    // Cycles per pixel the RDP spends drawing with the given mode: one or two cycles to shade, and
++    // more for reading and writing the depth buffer and for blending with the colour buffer.
++    float rdpCyclesPerPixel(const interop::OtherMode &mode) {
++        float cycles = (mode.cycleType() == G_CYC_2CYCLE) ? 2.0f : 1.0f;
++        if (mode.zCmp() || mode.zUpd()) {
++            cycles += 1.0f;
++        }
++
++        if (mode.forceBlend()) {
++            cycles += 0.5f;
++        }
++
++        return cycles;
++    }
++
+     // RDP
+     static uint8_t getCommandLength(uint32_t commandId) {
+         if (commandId == (G_TEXRECT & 0x3F) || commandId == (G_TEXRECTFLIP & 0x3F)) {
+@@ -587,6 +604,7 @@ namespace RT64 {
+     }
+ 
+     void RDP::loadTile(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t lrt) {
++        n64Cost.rdpCycles += 8.0 + double(((lrs >> 2) - (uls >> 2) + 1) * ((lrt >> 2) - (ult >> 2) + 1)) / 4.0;
+ #ifdef LOG_LOAD_METHODS
+         RT64_LOG_PRINTF("RDP::loadTile(tile %u, uls %u, ult %u, lrs %u, lrt %u)", tile, uls, ult, lrs, lrt);
+ #endif
+@@ -716,6 +734,7 @@ namespace RT64 {
+     }
+ 
+     void RDP::loadBlock(uint8_t tile, uint16_t uls, uint16_t ult, uint16_t lrs, uint16_t dxt) {
++        n64Cost.rdpCycles += 8.0 + double(lrs - uls + 1) / 4.0;
+ #ifdef LOG_LOAD_METHODS
+         RT64_LOG_PRINTF("RDP::loadBlock(tile %u, uls %u, ult %u, lrs %u, dxt %u)", tile, uls, ult, lrs, dxt);
+ #endif
+@@ -1198,6 +1217,11 @@ namespace RT64 {
+         }
+ 
+         const FixedRect drawRect(movedFromOrigin(ulx, extAlignment.leftOrigin), uly, movedFromOrigin(lrx, extAlignment.rightOrigin), lry);
++        {
++            const double rectPixels = std::max(double(lrx - ulx) / 4.0, 0.0) * std::max(double(lry - uly) / 4.0, 0.0);
++            n64Cost.pixels += rectPixels;
++            n64Cost.rdpCycles += 10.0 + ((usesFillMode || usesCopyMode) ? rectPixels / 4.0 : rectPixels * rdpCyclesPerPixel(otherMode));
++        }
+         if (drawRect.isEmpty()) {
+             return;
+         }
+@@ -1360,3 +1384,12 @@ namespace RT64 {
+         }
+     }
+ };
++
++extern "C" void rt64_take_n64_cost(double *rspCycles, double *rdpCycles, uint32_t *triangles, uint32_t *vertices, double *pixels) {
++    *rspCycles = RT64::n64Cost.rspCycles;
++    *rdpCycles = RT64::n64Cost.rdpCycles;
++    *triangles = RT64::n64Cost.triangles;
++    *vertices = RT64::n64Cost.vertices;
++    *pixels = RT64::n64Cost.pixels;
++    RT64::n64Cost = RT64::N64Cost();
++}
+diff --git a/src/hle/rt64_rdp.h b/src/hle/rt64_rdp.h
+index 5ecaf70..6ecfdbd 100644
+--- a/src/hle/rt64_rdp.h
++++ b/src/hle/rt64_rdp.h
+@@ -34,6 +34,19 @@
+ #endif
+ 
+ namespace RT64 {
++    // Rough N64 cost of the display lists processed so far, in RSP and RDP clock cycles (62.5 MHz).
++    // Used to imitate the N64's slowdown (added for 1080 Snowboarding: Recompiled).
++    struct N64Cost {
++        double rspCycles = 0.0;
++        double rdpCycles = 0.0;
++        uint32_t triangles = 0;
++        uint32_t vertices = 0;
++        double pixels = 0.0;
++    };
++
++    extern N64Cost n64Cost;
++    float rdpCyclesPerPixel(const interop::OtherMode &mode);
++
+     struct State;
+     struct GBI;
+ 
 diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
-index 1da2550..1208816 100644
+index 1da2550..9063526 100644
 --- a/src/hle/rt64_rsp.cpp
 +++ b/src/hle/rt64_rsp.cpp
 @@ -207,6 +207,95 @@ namespace RT64 {
@@ -422,7 +515,16 @@ index 1da2550..1208816 100644
      void RSP::popMatrix(uint32_t count) {
          while (count--) {
              if (modelMatrixStackSize > 1) {
-@@ -1142,12 +1231,23 @@ namespace RT64 {
+@@ -503,6 +592,8 @@ namespace RT64 {
+ 
+     template<bool addEmptyVelocity, uint32_t vertexSize>
+     void RSP::setVertexCommon(uint32_t rdramAddress, uint32_t dstIndex, uint32_t dstMax) {
++        n64Cost.vertices += (dstMax > dstIndex) ? (dstMax - dstIndex) : 0;
++        n64Cost.rspCycles += 40.0 * ((dstMax > dstIndex) ? (dstMax - dstIndex) : 0);
+         const int workloadCursor = state->ext.workloadQueue->writeCursor;
+         Workload &workload = state->ext.workloadQueue->workloads[workloadCursor];
+ 
+@@ -1142,18 +1233,62 @@ namespace RT64 {
              fbPair.scissorRect.merge(scissorRect);
  
              FixedRect drawRect;
@@ -446,6 +548,55 @@ index 1da2550..1208816 100644
              }
  
              const interop::RSPViewport &viewport = viewportStack[viewportStackSize - 1];
+             const FixedRect viewportClipRect = viewport.rect(clipRatios.data());
+             drawRect = viewportClipRect.intersection(scissorRect.intersection(drawRect));
+             if (!drawRect.isNull()) {
++                // N64 cost estimate: the triangle's area on screen (the viewport without the clipping guard band),
++                // or half that area when a corner is behind the camera.
++                const int16_t screenRatios[4] = { -1, -1, 1, 1 };
++                const FixedRect screenRect = viewport.rect(screenRatios).intersection(drawRect);
++                const double screenArea = screenRect.isNull() ? 0.0 : (double(screenRect.lrx - screenRect.ulx) / 4.0) * (double(screenRect.lry - screenRect.uly) / 4.0);
++                double area;
++                if (behindCamera) {
++                    // Only the part in front of the camera is drawn: bound it by the corners in front.
++                    FixedRect frontRect;
++                    for (int i = 0; i < 3; i++) {
++                        const uint32_t globalIndex = globalIndices[i];
++                        if ((globalIndex < workload.drawData.posTransformed.size()) && (float(workload.drawData.posTransformed[globalIndex].w) > 0.0f)) {
++                            const hlslpp::float3 &v = posScreen[globalIndex];
++                            frontRect.ulx = std::min(frontRect.ulx, int32_t(std::clamp(float(v.x), -4096.0f, 4096.0f) * 4.0f));
++                            frontRect.uly = std::min(frontRect.uly, int32_t(std::clamp(float(v.y), -4096.0f, 4096.0f) * 4.0f));
++                            frontRect.lrx = std::max(frontRect.lrx, int32_t(std::clamp(float(v.x), -4096.0f, 4096.0f) * 4.0f));
++                            frontRect.lry = std::max(frontRect.lry, int32_t(std::clamp(float(v.y), -4096.0f, 4096.0f) * 4.0f));
++                        }
++                    }
++
++                    const FixedRect frontScreen = frontRect.isNull() ? FixedRect() : screenRect.intersection(frontRect);
++                    area = frontScreen.isNull() ? 0.0 : 0.5 * (double(frontScreen.lrx - frontScreen.ulx) / 4.0) * (double(frontScreen.lry - frontScreen.uly) / 4.0);
++                }
++                else {
++                    const hlslpp::float3 &p0 = posScreen[globalIndices[0]];
++                    const hlslpp::float3 &p1 = posScreen[globalIndices[1]];
++                    const hlslpp::float3 &p2 = posScreen[globalIndices[2]];
++                    area = 0.5 * std::abs(double((p1.x - p0.x) * (p2.y - p0.y) - (p2.x - p0.x) * (p1.y - p0.y)));
++                    area = std::min(area, screenArea);
++                }
++
++                n64Cost.pixels += area;
++                n64Cost.rdpCycles += area * rdpCyclesPerPixel(state->rdp->otherMode);
+                 fbPair.drawColorRect.merge(drawRect);
+                 if (otherModeStack[otherModeStackSize - 1].zUpd()) {
+                     fbPair.drawDepthRect.merge(drawRect);
+@@ -1162,6 +1297,9 @@ namespace RT64 {
+         }
+ 
+         drawCall.triangleCount++;
++        n64Cost.triangles++;
++        n64Cost.rspCycles += 25.0;
++        n64Cost.rdpCycles += 30.0;
+     }
+ 
+     void RSP::drawIndexedTri(uint32_t a, uint32_t b, uint32_t c) {
 diff --git a/src/hle/rt64_rsp.h b/src/hle/rt64_rsp.h
 index 61bb3b1..bf80c56 100644
 --- a/src/hle/rt64_rsp.h

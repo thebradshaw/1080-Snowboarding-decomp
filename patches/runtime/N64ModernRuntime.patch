@@ -37,11 +37,68 @@ index 1cb3f6a..55569c8 100644
          assert(exit_reason == RspExitReason::Broke);
          return false;
      }
+diff --git a/ultramodern/include/ultramodern/ultramodern.hpp b/ultramodern/include/ultramodern/ultramodern.hpp
+index 46aea61..ff3a37a 100644
+--- a/ultramodern/include/ultramodern/ultramodern.hpp
++++ b/ultramodern/include/ultramodern/ultramodern.hpp
+@@ -100,6 +100,9 @@ void set_entrypoint_thread();
+ bool is_entrypoint_thread();
+ bool is_game_thread();
+ void submit_rsp_task(RDRAM_ARG PTR(OSTask) task);
++// Optional: called after each graphics task is drawn; returns how long (in microseconds) the N64 would have
++// needed for it, or 0. The task is then reported done only after that time, as the N64's slowdown.
++void set_gfx_task_time_callback(double (*callback)());
+ void send_si_message();
+ uint32_t get_speed_multiplier();
+ 
 diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
-index 17d7a47..be07e31 100644
+index 17d7a47..ee65885 100644
 --- a/ultramodern/src/events.cpp
 +++ b/ultramodern/src/events.cpp
-@@ -368,7 +368,9 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+@@ -7,6 +7,8 @@
+ #include <utility>
+ #include <mutex>
+ #include <queue>
++#include <deque>
++#include <algorithm>
+ #include <cstring>
+ 
+ #include "blockingconcurrentqueue.h"
+@@ -26,8 +28,15 @@ void ultramodern::events::set_callbacks(const ultramodern::events::callbacks_t&
+ 
+ struct SpTaskAction {
+     OSTask task;
++    std::chrono::high_resolution_clock::time_point submitted = std::chrono::high_resolution_clock::now();
+ };
+ 
++static std::atomic<double (*)()> gfx_task_time_callback{ nullptr };
++
++void ultramodern::set_gfx_task_time_callback(double (*callback)()) {
++    gfx_task_time_callback.store(callback);
++}
++
+ struct ScreenUpdateAction {
+     ultramodern::renderer::ViRegs regs;
+ };
+@@ -358,7 +367,17 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+     // Notify the caller thread that this thread is ready.
+     thread_ready->signal();
+ 
++    // Imitated N64 slowdown: when the graphics hardware would still be busy, tasks are reported done later.
++    std::chrono::high_resolution_clock::time_point rdp_free_at{};
++    std::deque<std::chrono::high_resolution_clock::time_point> pending_completions;
++
+     while (!exited) {
++        while (!pending_completions.empty() && (pending_completions.front() <= std::chrono::high_resolution_clock::now())) {
++            pending_completions.pop_front();
++            sp_complete();
++            dp_complete();
++        }
++
+         // Try to pull an action from the queue
+         Action action;
+         if (events_context.action_queue.wait_dequeue_timed(action, 1ms)) {
+@@ -368,7 +387,9 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
                  // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
                  // is finished as well, so sending this early shouldn't be an issue in most cases.
                  // If this causes issues then the logic can be replaced with responding to yield requests.
@@ -52,11 +109,22 @@ index 17d7a47..be07e31 100644
                  ultramodern::measure_input_latency();
  
                  PTR(u64) displaylist = task_action->task.t.data_ptr;
-@@ -378,6 +380,7 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+@@ -378,7 +399,17 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
                  renderer_context->send_dl(&task_action->task);
                  [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
  
-+                sp_complete();
-                 dp_complete();
+-                dp_complete();
++                auto time_callback = gfx_task_time_callback.load();
++                const double n64_us = (time_callback != nullptr) ? time_callback() : 0.0;
++                if ((n64_us > 0.0) || !pending_completions.empty()) {
++                    const auto start = std::max(task_action->submitted, rdp_free_at);
++                    rdp_free_at = start + std::chrono::microseconds(int64_t(std::max(n64_us, 0.0)));
++                    pending_completions.push_back(rdp_free_at);
++                }
++                else {
++                    sp_complete();
++                    dp_complete();
++                }
                  // TODO hook the parsed event up to the actual parsing point when a callback is added to RT64.
                  ultramodern::extensions::on_displaylist_parsed(displaylist);
+                 ultramodern::extensions::on_displaylist_completed(displaylist);

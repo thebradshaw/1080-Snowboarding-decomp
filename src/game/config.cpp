@@ -55,6 +55,7 @@ void game::init_config() {
     game::add_board_thickness_option(graphics_tab);
     game::add_crt_filter_option(graphics_tab);
     game::add_vsync_option(graphics_tab);
+    game::add_n64_slowdown_option(graphics_tab);
     game::add_tv_background_option(graphics_tab);
     game::add_hd_textures_option(graphics_tab);
 

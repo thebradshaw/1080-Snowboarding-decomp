@@ -43,6 +43,10 @@ namespace game {
     void add_tv_background_option(recomp::config::Config& graphics);
     void update_tv_background();
 
+    // N64 Slowdown option (n64_slowdown.cpp): busy scenes slow down as on the console. update_n64_slowdown runs every frame.
+    void add_n64_slowdown_option(recomp::config::Config& graphics);
+    void update_n64_slowdown();
+
     // HD Textures (hd_textures.cpp): the option, copying the bundled pack into
     // the mods folder at startup, and applying the option (every frame).
     void add_hd_textures_option(recomp::config::Config& graphics);

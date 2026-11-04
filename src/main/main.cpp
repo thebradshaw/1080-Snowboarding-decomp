@@ -717,6 +717,7 @@ int main(int argc, char** argv) {
             recompinput::update_rumble();
             game::update_crt_filter();
             game::update_vsync();
+            game::update_n64_slowdown();
             game::update_tv_background();
             game::update_hd_textures();
             game::achievements::frame();
