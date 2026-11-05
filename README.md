@@ -30,6 +30,8 @@ The downloads above are always the latest release; older ones are on the [releas
 
 ![Racing at dusk](docs/screenshots/dusk.jpg)
 
+<p align="center"><a href="https://buymeacoffee.com/chrisbradshaw"><img alt="Buy me a coffee" src="docs/coffee.svg" width="400"></a></p>
+
 ## What's new
 
 - **1.2.2:** With a TV background on, the game renders at the same resolution as without one and is scaled into the TV's screen. This is another fix for thin lines through 2D pictures in full screen.
@@ -113,6 +115,8 @@ not in this repository; set `HD_TEXTURE_PACK` and `LAUNCHER_LOGO` to bundle them
 - Enhancements hook the recompiled code in `src/game/`; renderer changes are kept as patches in `patches/runtime/`
 
 ## Credits
+
+If you enjoy this port, you can [buy me a coffee](https://buymeacoffee.com/chrisbradshaw).
 
 - [Snowboard Kids 2: Recompiled](https://github.com/cdlewis/snowboardkids2-recomp)
   by cdlewis (GPL-3), whose runtime setup this port started from
