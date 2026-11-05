@@ -721,7 +721,7 @@ index a870166..c70fd18 100644
      }
  
 diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
-index 89f2425..124ae64 100644
+index 89f2425..6b6692b 100644
 --- a/src/hle/rt64_workload_queue.cpp
 +++ b/src/hle/rt64_workload_queue.cpp
 @@ -124,7 +124,18 @@ namespace RT64 {
@@ -744,7 +744,7 @@ index 89f2425..124ae64 100644
          ext.sharedResources->swapChainSizeChanged = false;
          
          // Retrieve the reference height to be used for determining the resolution scale. Impose a minimum in case
-@@ -138,8 +149,8 @@ namespace RT64 {
+@@ -138,9 +149,16 @@ namespace RT64 {
          const auto ratioMode = ext.sharedResources->userConfig.aspectRatio;
          switch (ratioMode) {
          case UserConfiguration::AspectRatio::Expand:
@@ -753,9 +753,17 @@ index 89f2425..124ae64 100644
 +            if ((screenWidth > 0) && (screenHeight > 0)) {
 +                const float derivedRatioTarget = float(screenWidth) / float(screenHeight);
                  workloadConfig.aspectRatioTarget = std::max(derivedRatioTarget, workloadConfig.aspectRatioSource);
++
++                // A TV screen is 4:3 give or take a pixel of rounding. Stretching the picture by that fraction
++                // made thin lines through 2D art, so keep the game's own shape there.
++                const bool tvScreen = (screenWidth != ext.sharedResources->swapChainWidth) || (screenHeight != ext.sharedResources->swapChainHeight);
++                if (tvScreen && (std::abs(workloadConfig.aspectRatioTarget - workloadConfig.aspectRatioSource) < 0.05f)) {
++                    workloadConfig.aspectRatioTarget = workloadConfig.aspectRatioSource;
++                }
              }
              else {
-@@ -189,8 +200,8 @@ namespace RT64 {
+                 workloadConfig.aspectRatioTarget = workloadConfig.aspectRatioSource;
+@@ -189,8 +207,8 @@ namespace RT64 {
          const auto resolutionMode = ext.sharedResources->userConfig.resolution;
          switch (resolutionMode) {
          case UserConfiguration::Resolution::WindowIntegerScale:
@@ -766,7 +774,7 @@ index 89f2425..124ae64 100644
              }
              else {
                  resolutionMultiplier = 1.0f;
-@@ -990,6 +1001,7 @@ namespace RT64 {
+@@ -990,6 +1008,7 @@ namespace RT64 {
                      matchingProfiler.reset();
                      matchingProfiler.start();
                      curFrame.match(ext.workloadGraphicsWorker, *this, prevFrame, ext.workloadVelocityUploader, velocityUploaderUsed, tileInterpolationUsed, lookAtInterpolationUsed);

@@ -42,7 +42,7 @@ foreach(required RecompiledFuncs/funcs.h rsp/aspMain.cpp recomp-input/module_tab
     endif()
 endforeach()
 
-set(GAME_VERSION "1.2" CACHE STRING "Version shown in the launcher")
+set(GAME_VERSION "1.2.1" CACHE STRING "Version shown in the launcher")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/game_version.h.tmp"
     "#pragma once\ninline constexpr const char* game_version = \"${GAME_VERSION}\";\n")
