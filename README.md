@@ -1,6 +1,6 @@
 <h1 align="center">1080° Snowboarding: Recompiled</h1>
 
-<p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards, RetroAchievements and more, all optional.<br>Made by Vibe Slop Studios.</p>
+<p align="center">A native PC port of the 1998 N64 snowboarding game 1080° Snowboarding, built with static recompilation, with widescreen, 60 and 120 fps, longer draw distance, HD boards, TV backgrounds, GameShark cheats, RetroAchievements and more, all optional.<br>Made by Vibe Slop Studios.</p>
 
 <p align="center">
   <a href="https://github.com/thebradshaw/1080-Snowboarding-decomp/releases/latest/download/1080SnowboardingRecompiled-windows-x64.zip"><img alt="Download for Windows" src="https://img.shields.io/badge/Download-Windows%20(x64)-2a6fe8?style=for-the-badge&logo=windows&logoColor=white" height="44"></a>
@@ -29,6 +29,16 @@ The downloads above are always the latest release; older ones are on the [releas
 | The helicopter | By the banners |
 
 ![Racing at dusk](docs/screenshots/dusk.jpg)
+
+## What's new
+
+- **1.2.2:** With a TV background on, the game renders at the same resolution as without one and is scaled into the TV's screen. This is another fix for thin lines through 2D pictures in full screen.
+- **1.2.1:** With a TV background on, logos, menus and text no longer get thin lines through them, and the N64 Solid background puts the game in the middle of the TV.
+- **1.2:** New **N64 Slowdown** setting (off by default). The game always runs at full speed at 30, 60 and 120 fps; with this on, busy scenes slow down as they did on the console. The amount is an estimate for now.
+- **1.1:** New **TV Background** setting, which shows the game on a TV in a room, with Soqueroeu's N64 TVs included. New **Cheats** page on the launcher for GameShark and Action Replay codes, with common unlocks built in.
+- **1.0.1:** Fixed the bar in the ice cave and added a VSync setting.
+
+Older releases and their downloads are on the [releases page](../../releases).
 
 ## Options
 
