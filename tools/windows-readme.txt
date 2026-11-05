@@ -1,4 +1,4 @@
-1080 Snowboarding: Recompiled 1.2.1 for Windows
+1080 Snowboarding: Recompiled 1.2.2 for Windows
 
 1. Unzip this folder anywhere (use a new folder, not over an older version).
 2. Run 1080SnowboardingRecompiled.exe.
@@ -15,6 +15,11 @@ problem happens.
 
 Needs Windows 10 or 11 (64-bit) and a GPU with Vulkan (the default) or Direct3D 12 (selectable in Settings > Graphics).
 The ROM is not included.
+
+Changes in 1.2.2: With a TV background on, the game now renders at the same
+resolution as without one and is scaled down into the TV's screen. This is
+another fix for thin lines through 2D pictures, which some PCs still showed
+in full screen.
 
 Changes in 1.2.1: With a TV background on, 2D pictures (logos, menus, text)
 no longer have thin lines through them, and the N64 Solid background puts the

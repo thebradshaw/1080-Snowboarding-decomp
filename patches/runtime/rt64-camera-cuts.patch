@@ -721,7 +721,7 @@ index a870166..c70fd18 100644
      }
  
 diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
-index 89f2425..6b6692b 100644
+index 89f2425..ade72a6 100644
 --- a/src/hle/rt64_workload_queue.cpp
 +++ b/src/hle/rt64_workload_queue.cpp
 @@ -124,7 +124,18 @@ namespace RT64 {
@@ -763,18 +763,17 @@ index 89f2425..6b6692b 100644
              }
              else {
                  workloadConfig.aspectRatioTarget = workloadConfig.aspectRatioSource;
-@@ -189,8 +207,8 @@ namespace RT64 {
+@@ -189,6 +207,9 @@ namespace RT64 {
          const auto resolutionMode = ext.sharedResources->userConfig.resolution;
          switch (resolutionMode) {
          case UserConfiguration::Resolution::WindowIntegerScale:
--            if (ext.sharedResources->swapChainHeight > 0) {
--                resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + referenceHeight - 1) / referenceHeight), 1.0f);
-+            if (screenHeight > 0) {
-+                resolutionMultiplier = std::max(float((screenHeight + referenceHeight - 1) / referenceHeight), 1.0f);
++            // Sized from the whole window even when a TV background shrinks the picture: the game then renders
++            // exactly as it does without the TV (some GPUs showed thin lines through 2D art at the lower scale),
++            // and the picture is scaled down into the TV's screen.
+             if (ext.sharedResources->swapChainHeight > 0) {
+                 resolutionMultiplier = std::max(float((ext.sharedResources->swapChainHeight + referenceHeight - 1) / referenceHeight), 1.0f);
              }
-             else {
-                 resolutionMultiplier = 1.0f;
-@@ -990,6 +1008,7 @@ namespace RT64 {
+@@ -990,6 +1011,7 @@ namespace RT64 {
                      matchingProfiler.reset();
                      matchingProfiler.start();
                      curFrame.match(ext.workloadGraphicsWorker, *this, prevFrame, ext.workloadVelocityUploader, velocityUploaderUsed, tileInterpolationUsed, lookAtInterpolationUsed);
