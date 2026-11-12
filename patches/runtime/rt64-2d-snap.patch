@@ -1,0 +1,18 @@
+diff --git a/src/shaders/RasterPS.hlsl b/src/shaders/RasterPS.hlsl
+index e7895c3..6655fe3 100644
+--- a/src/shaders/RasterPS.hlsl
++++ b/src/shaders/RasterPS.hlsl
+@@ -117,7 +117,12 @@ LIBRARY_EXPORT bool RasterPS(const RenderParams rp, float4 vertexPosition, float
+     if (!renderFlagUpscale2D(rp.flags)) {
+         float2 screenPos = floor(vertexPosition.xy);
+         screenPos.x += FbParams.horizontalMisalignment;
+-        lowResUV -= fmod(screenPos.xy, FbParams.resolutionScale.yy) * float2(ddxVertexUV.x, ddyVertexUV.y);
++        // fmod divides with an approximate reciprocal on some GPUs (AMD), so at 3x, 5x or 6x a pixel on a multiple of the
++        // scale can get the scale back instead of 0. Its UV then lands a texel early and the first column of each 2D
++        // strip samples outside its tile, drawing thin lines through logos and menus.
++        float2 subPixel = fmod(screenPos.xy, FbParams.resolutionScale.yy);
++        subPixel = select(subPixel >= FbParams.resolutionScale.yy, subPixel - FbParams.resolutionScale.yy, subPixel);
++        lowResUV -= subPixel * float2(ddxVertexUV.x, ddyVertexUV.y);
+     }
+     
+     int tileIndex0 = 0;

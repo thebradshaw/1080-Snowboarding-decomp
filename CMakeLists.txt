@@ -18,7 +18,8 @@ find_package(Git QUIET)
 foreach(runtime_patch IN ITEMS
         "lib/N64ModernRuntime|patches/runtime/N64ModernRuntime.patch"
         "lib/RecompFrontend|patches/runtime/RecompFrontend.patch"
-        "lib/rt64|patches/runtime/rt64-camera-cuts.patch")
+        "lib/rt64|patches/runtime/rt64-camera-cuts.patch"
+        "lib/rt64|patches/runtime/rt64-2d-snap.patch")
     string(REPLACE "|" ";" runtime_patch_parts "${runtime_patch}")
     list(GET runtime_patch_parts 0 patch_dir)
     list(GET runtime_patch_parts 1 patch_file)
