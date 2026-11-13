@@ -17,6 +17,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Git QUIET)
 foreach(runtime_patch IN ITEMS
         "lib/N64ModernRuntime|patches/runtime/N64ModernRuntime.patch"
+        "lib/N64ModernRuntime|patches/runtime/librecomp-exit.patch"
         "lib/RecompFrontend|patches/runtime/RecompFrontend.patch"
         "lib/rt64|patches/runtime/rt64-camera-cuts.patch")
     string(REPLACE "|" ";" runtime_patch_parts "${runtime_patch}")

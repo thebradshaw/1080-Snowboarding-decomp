@@ -1,0 +1,28 @@
+diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
+index 850689d..be771a7 100644
+--- a/librecomp/src/recomp.cpp
++++ b/librecomp/src/recomp.cpp
+@@ -995,18 +995,10 @@ void recomp::start(const recomp::Configuration& cfg) {
+     ultramodern::join_event_threads();
+     ultramodern::join_thread_cleaner_thread();
+     ultramodern::join_saving_thread();
+-    
+-    // Free rdram.
+-    bool free_failed;
+-#ifdef _WIN32
+-    // VirtualFree returns zero on failure.
+-    free_failed = (VirtualFree(rdram, 0, MEM_RELEASE) == 0);
+-#else
+-    // munmap returns -1 on failure.
+-    free_failed = (munmap(rdram, allocation_size) == -1);
+-#endif
+ 
+-    if (free_failed) {
+-        printf("Failed to free rdram\n");
+-    }
++    // The game's own threads are never joined and can still be running here.
++    // Freeing rdram or running static destructors under them segfaults, so
++    // leave the process without either. Saves were flushed above.
++    fflush(nullptr);
++    std::_Exit(EXIT_SUCCESS);
+ }
